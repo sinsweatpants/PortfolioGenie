@@ -6,6 +6,15 @@ import { insertPortfolioSchema, insertProjectSchema, insertTemplateSchema } from
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
+import {
+  generateText,
+  generateTemplateIdeas,
+  translateText,
+  suggestContentImprovements,
+  generatePerformanceSuggestions,
+  generateAccessibilitySuggestions,
+} from "./ai";
+import { analyzePerformance, analyzeAccessibility } from "./analysis";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -277,19 +286,364 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // File upload route
-  app.post('/api/upload', authenticateToken, upload.single('file'), (req: AuthenticatedRequest, res: Response) => {
+  app.post('/api/upload', authenticateToken, upload.single('file'), async (req: AuthenticatedRequest, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
       }
-      
-      // In a real application, you'd upload to cloud storage (S3, etc.)
-      // For now, return a placeholder URL
+
       const fileUrl = `/uploads/${req.file.filename}`;
-      res.json({ url: fileUrl });
+
+      res.json({
+        url: fileUrl,
+        originalSize: req.file.size,
+        optimizedSize: req.file.size,
+        width: null,
+        height: null,
+      });
     } catch (error) {
       console.error("Error uploading file:", error);
       res.status(500).json({ message: "Failed to upload file" });
+    }
+  });
+
+  // AI assistance routes
+  app.post('/api/ai/generate-text', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const schema = z.object({
+        prompt: z.string().min(1),
+        tone: z.string().optional(),
+        length: z.enum(['short', 'medium', 'long']).optional(),
+        existingText: z.string().optional(),
+      });
+
+      const payload = schema.parse(req.body);
+      const text = await generateText(payload);
+      res.json({ text });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid request", errors: error.errors });
+      }
+      console.error("Error generating text:", error);
+      res.status(500).json({ message: "Failed to generate text" });
+    }
+  });
+
+  app.post('/api/ai/content-improvements', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const schema = z.object({ content: z.string().min(1) });
+      const { content } = schema.parse(req.body);
+      const suggestions = await suggestContentImprovements(content);
+      res.json({ suggestions });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid request", errors: error.errors });
+      }
+      console.error("Error suggesting improvements:", error);
+      res.status(500).json({ message: "Failed to analyze content" });
+    }
+  });
+
+  app.post('/api/ai/templates', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const schema = z.object({
+        industry: z.string().min(1),
+        goals: z.string().optional(),
+        tone: z.string().optional(),
+        mustHaveSections: z.array(z.string()).optional(),
+      });
+
+      const payload = schema.parse(req.body);
+      const outline = await generateTemplateIdeas(payload);
+      res.json({ outline });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid request", errors: error.errors });
+      }
+      console.error("Error generating template ideas:", error);
+      res.status(500).json({ message: "Failed to generate template suggestions" });
+    }
+  });
+
+  app.post('/api/ai/translate', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const schema = z.object({
+        text: z.string().min(1),
+        targetLanguage: z.string().min(1),
+        sourceLanguage: z.string().optional(),
+      });
+
+      const payload = schema.parse(req.body);
+      const translated = await translateText(payload);
+      res.json({ translated });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid request", errors: error.errors });
+      }
+      console.error("Error translating text:", error);
+      res.status(500).json({ message: "Failed to translate text" });
+    }
+  });
+
+  // Analysis routes
+  app.post('/api/analysis/performance', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const schema = z.object({ portfolioId: z.string().min(1) });
+      const { portfolioId } = schema.parse(req.body);
+
+      const portfolio = await storage.getPortfolio(portfolioId);
+      if (!portfolio) {
+        return res.status(404).json({ message: "Portfolio not found" });
+      }
+
+      if (portfolio.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const projects = await storage.getPortfolioProjects(portfolioId);
+      const report = analyzePerformance(portfolio, projects);
+      let aiAdvice: string | null = null;
+
+      try {
+        aiAdvice = await generatePerformanceSuggestions({
+          projectCount: report.projectCount,
+          averageDescriptionLength: report.averageDescriptionLength,
+          hasLargeImages: report.hasLargeImages,
+          customScripts: report.customScriptBlocks,
+        });
+      } catch (aiError) {
+        console.warn("AI performance suggestion failed", aiError);
+      }
+
+      res.json({ report, aiAdvice });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid request", errors: error.errors });
+      }
+      console.error("Error analyzing performance:", error);
+      res.status(500).json({ message: "Failed to analyze performance" });
+    }
+  });
+
+  app.post('/api/analysis/accessibility', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const schema = z.object({ portfolioId: z.string().min(1) });
+      const { portfolioId } = schema.parse(req.body);
+
+      const portfolio = await storage.getPortfolio(portfolioId);
+      if (!portfolio) {
+        return res.status(404).json({ message: "Portfolio not found" });
+      }
+
+      if (portfolio.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const projects = await storage.getPortfolioProjects(portfolioId);
+      const report = analyzeAccessibility(portfolio, projects);
+      let aiAdvice: string | null = null;
+
+      try {
+        aiAdvice = await generateAccessibilitySuggestions({
+          missingAltTags: report.missingAltTags,
+          lowContrastPairs: report.lowContrastPairs,
+          headingIssues: report.headingIssues,
+        });
+      } catch (aiError) {
+        console.warn("AI accessibility suggestion failed", aiError);
+      }
+
+      res.json({ report, aiAdvice });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid request", errors: error.errors });
+      }
+      console.error("Error analyzing accessibility:", error);
+      res.status(500).json({ message: "Failed to analyze accessibility" });
+    }
+  });
+
+  // Portfolio versioning
+  app.get('/api/portfolios/:id/versions', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const portfolio = await storage.getPortfolio(req.params.id);
+      if (!portfolio) {
+        return res.status(404).json({ message: "Portfolio not found" });
+      }
+
+      if (portfolio.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const versions = await storage.getPortfolioVersions(req.params.id);
+      res.json(versions);
+    } catch (error) {
+      console.error("Error fetching versions:", error);
+      res.status(500).json({ message: "Failed to fetch versions" });
+    }
+  });
+
+  app.post('/api/portfolios/:id/versions', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const portfolio = await storage.getPortfolio(req.params.id);
+      if (!portfolio) {
+        return res.status(404).json({ message: "Portfolio not found" });
+      }
+
+      if (portfolio.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const schema = z.object({
+        title: z.string().optional(),
+        summary: z.string().optional(),
+      });
+
+      const payload = schema.parse(req.body);
+      const snapshot = {
+        name: portfolio.name,
+        description: portfolio.description,
+        slug: portfolio.slug,
+        templateId: portfolio.templateId,
+        isPublished: portfolio.isPublished,
+        customization: portfolio.customization,
+      };
+
+      const version = await storage.createPortfolioVersion({
+        portfolioId: portfolio.id,
+        title: payload.title || `Snapshot ${new Date().toLocaleString()}`,
+        summary: payload.summary,
+        snapshot,
+      });
+
+      res.status(201).json(version);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid request", errors: error.errors });
+      }
+      console.error("Error creating portfolio version:", error);
+      res.status(500).json({ message: "Failed to create portfolio version" });
+    }
+  });
+
+  app.post('/api/portfolios/:id/versions/:versionId/revert', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const portfolio = await storage.getPortfolio(req.params.id);
+      if (!portfolio) {
+        return res.status(404).json({ message: "Portfolio not found" });
+      }
+
+      if (portfolio.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const version = await storage.getPortfolioVersion(req.params.versionId);
+      if (!version || version.portfolioId !== portfolio.id) {
+        return res.status(404).json({ message: "Version not found" });
+      }
+
+      const revertSchema = z.object({
+        name: z.string().optional(),
+        description: z.string().nullable().optional(),
+        slug: z.string().optional(),
+        templateId: z.string().nullable().optional(),
+        isPublished: z.boolean().optional(),
+        customization: z.any().optional(),
+      });
+
+      const snapshot = revertSchema.parse(version.snapshot);
+      const updatedPortfolio = await storage.updatePortfolio(portfolio.id, snapshot);
+
+      res.json(updatedPortfolio);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid snapshot data", errors: error.errors });
+      }
+      console.error("Error reverting portfolio:", error);
+      res.status(500).json({ message: "Failed to revert portfolio" });
+    }
+  });
+
+  app.get('/api/portfolios/:id/export', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const portfolio = await storage.getPortfolio(req.params.id);
+      if (!portfolio) {
+        return res.status(404).json({ message: "Portfolio not found" });
+      }
+
+      if (portfolio.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const projects = await storage.getPortfolioProjects(portfolio.id);
+      const format = (req.query.format as string) || 'json';
+      const payload = { portfolio, projects };
+
+      if (format === 'markdown') {
+        const markdown = [
+          `# ${portfolio.name}`,
+          portfolio.description ? `\n${portfolio.description}` : '',
+          '',
+          '## Projects',
+          ...projects.map((project, index) => {
+            const lines = [`${index + 1}. **${project.title}**`];
+            if (project.description) {
+              lines.push(`   - ${project.description}`);
+            }
+            if (project.projectUrl) {
+              lines.push(`   - URL: ${project.projectUrl}`);
+            }
+            return lines.join('\n');
+          }),
+        ].join('\n');
+
+        res.setHeader('Content-Type', 'text/markdown');
+        return res.send(markdown);
+      }
+
+      if (format === 'html') {
+        const projectCards = projects
+          .map(
+            (project) => `
+          <section>
+            <h2>${project.title}</h2>
+            ${project.imageUrl ? `<img src="${project.imageUrl}" alt="${project.title}" />` : ''}
+            ${project.description ? `<p>${project.description}</p>` : ''}
+            ${project.projectUrl ? `<p><a href="${project.projectUrl}">View project</a></p>` : ''}
+          </section>
+        `,
+          )
+          .join('\n');
+
+        const html = `<!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <title>${portfolio.name}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 2rem; }
+            section { margin-bottom: 2rem; }
+            img { max-width: 100%; height: auto; border-radius: 0.5rem; }
+          </style>
+        </head>
+        <body>
+          <header>
+            <h1>${portfolio.name}</h1>
+            ${portfolio.description ? `<p>${portfolio.description}</p>` : ''}
+          </header>
+          ${projectCards}
+        </body>
+        </html>`;
+
+        res.setHeader('Content-Type', 'text/html');
+        return res.send(html);
+      }
+
+      res.json(payload);
+    } catch (error) {
+      console.error("Error exporting portfolio:", error);
+      res.status(500).json({ message: "Failed to export portfolio" });
     }
   });
 

@@ -15,16 +15,31 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ProjectUpload } from "@/components/project-upload";
-import { 
-  ArrowLeft, 
-  Eye, 
-  Rocket, 
-  Plus, 
-  Edit, 
+import {
+  ArrowLeft,
+  Eye,
+  Rocket,
+  Plus,
+  Edit,
   Trash2,
   Save,
   Settings
 } from "lucide-react";
+import {
+  AITextAssistant,
+  TemplateGenerator,
+  ColorPaletteTool,
+  FontManager,
+  LayoutBuilder,
+  AnimationEditor,
+  TranslationAssistant,
+  MediaOptimizer,
+  ResponsivePreview,
+  PerformanceOptimizer,
+  AccessibilityChecker,
+  ExportManager,
+  VersionHistory,
+} from "@/components/editor";
 import type { Portfolio, Project } from "@shared/schema";
 
 export default function PortfolioEditor() {
@@ -34,6 +49,7 @@ export default function PortfolioEditor() {
   const { isAuthenticated, isLoading } = useAuth();
   const queryClient = useQueryClient();
   const [isNewPortfolio] = useState(id === "new");
+  const portfolioId = !isNewPortfolio && id ? id : undefined;
 
   const [formData, setFormData] = useState({
     name: "",
@@ -150,6 +166,14 @@ export default function PortfolioEditor() {
       });
     },
   });
+
+  const handleVersionReverted = () => {
+    if (!portfolioId) {
+      return;
+    }
+    queryClient.invalidateQueries({ queryKey: [`/api/portfolios/${portfolioId}`] });
+    queryClient.invalidateQueries({ queryKey: [`/api/portfolios/${portfolioId}/projects`] });
+  };
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({
@@ -473,32 +497,108 @@ export default function PortfolioEditor() {
             </Card>
 
             {/* Quick Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start"
-                  disabled={isNewPortfolio}
-                  data-testid="button-quick-publish"
-                >
-                  <Rocket className="w-4 h-4 mr-2" />
-                  {formData.isPublished ? "Update Live Site" : "Publish Portfolio"}
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="w-full justify-start"
-                  disabled={isNewPortfolio || !formData.isPublished}
-                  data-testid="button-quick-view"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  View Public Portfolio
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                disabled={isNewPortfolio}
+                data-testid="button-quick-publish"
+              >
+                <Rocket className="w-4 h-4 mr-2" />
+                {formData.isPublished ? "Update Live Site" : "Publish Portfolio"}
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                disabled={isNewPortfolio || !formData.isPublished}
+                data-testid="button-quick-view"
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                View Public Portfolio
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+        <div className="mt-12 space-y-10">
+          <Card>
+            <CardHeader>
+              <CardTitle>Intelligent Assistance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-10 lg:grid-cols-2">
+                <AITextAssistant
+                  className="min-h-[28rem]"
+                  onGenerate={(text) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      description: text,
+                    }))
+                  }
+                />
+                <div className="space-y-10">
+                  <TemplateGenerator />
+                  <TranslationAssistant />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Design Studio</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-10">
+              <div className="grid gap-10 lg:grid-cols-2">
+                <ColorPaletteTool />
+                <FontManager />
+              </div>
+              <div className="grid gap-10 lg:grid-cols-2">
+                <LayoutBuilder />
+                <AnimationEditor />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Optimization & Quality</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-10">
+              <div className="grid gap-10 lg:grid-cols-2">
+                <MediaOptimizer />
+                <ResponsivePreview slug={formData.slug} isPublished={Boolean(formData.isPublished && portfolioId)} />
+              </div>
+              <div className="grid gap-10 lg:grid-cols-2">
+                <PerformanceOptimizer portfolioId={portfolioId} />
+                <AccessibilityChecker portfolioId={portfolioId} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Operations</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-10 lg:grid-cols-[2fr,1fr]">
+              <VersionHistory
+                portfolioId={portfolioId}
+                onReverted={() => {
+                  handleVersionReverted();
+                }}
+              />
+              <ExportManager
+                portfolioId={portfolioId}
+                portfolioName={formData.name}
+                slug={formData.slug}
+              />
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
