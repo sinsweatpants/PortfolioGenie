@@ -1,7 +1,7 @@
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupAuth, authenticateToken, type AuthenticatedRequest } from "./auth";
 import { insertPortfolioSchema, insertProjectSchema, insertTemplateSchema } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
@@ -27,14 +27,13 @@ const upload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
-  await setupAuth(app);
+  // Setup authentication routes
+  setupAuth(app);
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // User profile route
+  app.get('/api/auth/user', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const user = await storage.getUser(req.user!.id);
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -43,10 +42,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Portfolio routes
-  app.get('/api/portfolios', isAuthenticated, async (req: any, res) => {
+  app.get('/api/portfolios', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
-      const portfolios = await storage.getUserPortfolios(userId);
+      const portfolios = await storage.getUserPortfolios(req.user!.id);
       res.json(portfolios);
     } catch (error) {
       console.error("Error fetching portfolios:", error);
@@ -54,7 +52,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/portfolios/:id', isAuthenticated, async (req: any, res) => {
+  app.get('/api/portfolios/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const portfolio = await storage.getPortfolio(req.params.id);
       if (!portfolio) {
@@ -62,8 +60,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user owns this portfolio
-      const userId = req.user.claims.sub;
-      if (portfolio.userId !== userId) {
+      if (portfolio.userId !== req.user!.id) {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -74,12 +71,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/portfolios', isAuthenticated, async (req: any, res) => {
+  app.post('/api/portfolios', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const userId = req.user.claims.sub;
       const portfolioData = insertPortfolioSchema.parse({
         ...req.body,
-        userId,
+        userId: req.user!.id,
       });
       
       const portfolio = await storage.createPortfolio(portfolioData);
@@ -93,7 +89,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/portfolios/:id', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/portfolios/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const portfolio = await storage.getPortfolio(req.params.id);
       if (!portfolio) {
@@ -101,8 +97,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user owns this portfolio
-      const userId = req.user.claims.sub;
-      if (portfolio.userId !== userId) {
+      if (portfolio.userId !== req.user!.id) {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -118,7 +113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/portfolios/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/portfolios/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const portfolio = await storage.getPortfolio(req.params.id);
       if (!portfolio) {
@@ -126,8 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user owns this portfolio
-      const userId = req.user.claims.sub;
-      if (portfolio.userId !== userId) {
+      if (portfolio.userId !== req.user!.id) {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -161,7 +155,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Project routes
-  app.get('/api/portfolios/:portfolioId/projects', isAuthenticated, async (req: any, res) => {
+  app.get('/api/portfolios/:portfolioId/projects', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const portfolio = await storage.getPortfolio(req.params.portfolioId);
       if (!portfolio) {
@@ -169,8 +163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user owns this portfolio
-      const userId = req.user.claims.sub;
-      if (portfolio.userId !== userId) {
+      if (portfolio.userId !== req.user!.id) {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -182,7 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/portfolios/:portfolioId/projects', isAuthenticated, async (req: any, res) => {
+  app.post('/api/portfolios/:portfolioId/projects', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const portfolio = await storage.getPortfolio(req.params.portfolioId);
       if (!portfolio) {
@@ -190,8 +183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if user owns this portfolio
-      const userId = req.user.claims.sub;
-      if (portfolio.userId !== userId) {
+      if (portfolio.userId !== req.user!.id) {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -211,7 +203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch('/api/projects/:id', isAuthenticated, async (req: any, res) => {
+  app.patch('/api/projects/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const project = await storage.getProject(req.params.id);
       if (!project) {
@@ -220,8 +212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check if user owns the portfolio this project belongs to
       const portfolio = await storage.getPortfolio(project.portfolioId);
-      const userId = req.user.claims.sub;
-      if (!portfolio || portfolio.userId !== userId) {
+      if (!portfolio || portfolio.userId !== req.user!.id) {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -237,7 +228,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/projects/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/projects/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
     try {
       const project = await storage.getProject(req.params.id);
       if (!project) {
@@ -246,8 +237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check if user owns the portfolio this project belongs to
       const portfolio = await storage.getPortfolio(project.portfolioId);
-      const userId = req.user.claims.sub;
-      if (!portfolio || portfolio.userId !== userId) {
+      if (!portfolio || portfolio.userId !== req.user!.id) {
         return res.status(403).json({ message: "Access denied" });
       }
       
@@ -287,7 +277,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // File upload route
-  app.post('/api/upload', isAuthenticated, upload.single('file'), (req: any, res) => {
+  app.post('/api/upload', authenticateToken, upload.single('file'), (req: AuthenticatedRequest, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });

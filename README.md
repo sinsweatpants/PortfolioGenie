@@ -9,7 +9,8 @@ A modern, full-stack portfolio generation application that allows users to creat
 - **Multiple Templates**: Choose from various professionally designed portfolio templates
 - **Responsive Design**: Portfolios look great on all devices
 - **Real-time Preview**: See your portfolio as you build it
-- **Authentication**: Secure user authentication system
+- **Authentication**: Secure JWT-based authentication system
+- **User Registration**: Easy signup process with email and password
 - **Dashboard**: Manage all your portfolios from a centralized dashboard
 
 ## 🛠️ Tech Stack
@@ -39,29 +40,41 @@ A modern, full-stack portfolio generation application that allows users to creat
 
 ```
 PortfolioGenie/
-├── client/                 # Frontend React application
-│   ├── src/
-│   │   ├── components/     # Reusable UI components
-│   │   │   ├── ui/        # Shadcn/ui components
-│   │   │   ├── portfolio-templates.tsx
-│   │   │   └── project-upload.tsx
-│   │   ├── hooks/         # Custom React hooks
-│   │   ├── lib/           # Utility functions and configurations
-│   │   ├── pages/         # Main application pages
-│   │   └── App.tsx        # Main application component
-│   └── index.html         # HTML entry point
-├── server/                # Backend API server
-│   ├── db.ts             # Database configuration
-│   ├── index.ts          # Server entry point
-│   ├── routes.ts         # API routes
-│   ├── storage.ts        # File storage handling
-│   └── replitAuth.ts     # Authentication logic
-├── shared/               # Shared types and schemas
-│   └── schema.ts         # Database schema definitions
-├── package.json          # Dependencies and scripts
-├── vite.config.ts        # Vite configuration
-├── tailwind.config.ts    # Tailwind CSS configuration
-└── tsconfig.json         # TypeScript configuration
+├── apps/                    # التطبيقات الرئيسية
+│   ├── frontend/           # تطبيق React (العميل)
+│   │   ├── src/
+│   │   │   ├── components/ # المكونات القابلة لإعادة الاستخدام
+│   │   │   │   └── ui/     # مكونات Shadcn/ui
+│   │   │   ├── hooks/      # خطافات React المخصصة
+│   │   │   ├── lib/        # الوظائف المساعدة والتكوينات
+│   │   │   ├── pages/      # صفحات التطبيق الرئيسية
+│   │   │   └── App.tsx     # المكون الرئيسي للتطبيق
+│   │   └── index.html      # نقطة دخول HTML
+│   └── backend/            # خادم Express (الخادم)
+│       ├── db.ts           # تكوين قاعدة البيانات
+│       ├── index.ts        # نقطة دخول الخادم
+│       ├── routes.ts       # مسارات API
+│       └── storage.ts      # التعامل مع تخزين الملفات
+├── packages/               # الحزم المشتركة
+│   └── shared/            # الأنواع والمخططات المشتركة
+│       └── schema.ts       # تعريفات مخطط قاعدة البيانات
+├── config/                 # ملفات التكوين
+│   ├── postcss.config.js   # تكوين PostCSS
+│   ├── components.json     # تكوين Shadcn/ui
+│   └── drizzle.config.ts   # تكوين Drizzle ORM
+├── docs/                   # الوثائق
+│   ├── API.md             # وثائق API
+│   └── CONTRIBUTING.md    # دليل المساهمة
+├── scripts/               # سكريبتات البناء والتطوير
+│   ├── build.mjs          # سكريبت البناء
+│   └── dev.mjs            # سكريبت التطوير
+├── public/                # الملفات العامة
+├── uploads/               # مجلد الملفات المرفوعة
+├── .env.example           # مثال على متغيرات البيئة
+├── package.json           # التبعيات والأوامر
+├── vite.config.ts         # تكوين Vite
+├── tailwind.config.ts     # تكوين Tailwind CSS
+└── tsconfig.json          # تكوين TypeScript
 ```
 
 ## 🚦 Getting Started
