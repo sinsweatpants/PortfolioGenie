@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm';
 import {
-  index,
   jsonb,
   pgTable,
   timestamp,
@@ -71,6 +70,15 @@ export const templates = pgTable("templates", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const portfolioVersions = pgTable("portfolio_versions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  portfolioId: varchar("portfolio_id").notNull().references(() => portfolios.id, { onDelete: "cascade" }),
+  title: varchar("title"),
+  summary: text("summary"),
+  snapshot: jsonb("snapshot").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   portfolios: many(portfolios),
@@ -82,11 +90,19 @@ export const portfoliosRelations = relations(portfolios, ({ one, many }) => ({
     references: [users.id],
   }),
   projects: many(projects),
+  versions: many(portfolioVersions),
 }));
 
 export const projectsRelations = relations(projects, ({ one }) => ({
   portfolio: one(portfolios, {
     fields: [projects.portfolioId],
+    references: [portfolios.id],
+  }),
+}));
+
+export const portfolioVersionsRelations = relations(portfolioVersions, ({ one }) => ({
+  portfolio: one(portfolios, {
+    fields: [portfolioVersions.portfolioId],
     references: [portfolios.id],
   }),
 }));
@@ -136,6 +152,11 @@ export const insertTemplateSchema = createInsertSchema(templates).omit({
   rating: true,
 });
 
+export const insertPortfolioVersionSchema = createInsertSchema(portfolioVersions).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type UpsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
@@ -145,3 +166,5 @@ export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;
 export type InsertTemplate = z.infer<typeof insertTemplateSchema>;
 export type Template = typeof templates.$inferSelect;
+export type InsertPortfolioVersion = z.infer<typeof insertPortfolioVersionSchema>;
+export type PortfolioVersion = typeof portfolioVersions.$inferSelect;

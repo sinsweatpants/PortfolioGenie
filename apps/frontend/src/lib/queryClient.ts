@@ -12,10 +12,24 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const headers: Record<string, string> = {};
+  let body: BodyInit | undefined;
+
+  if (data instanceof FormData) {
+    body = data;
+  } else if (data instanceof Blob) {
+    body = data;
+  } else if (typeof data === "string" || data instanceof ArrayBuffer || data instanceof Uint8Array) {
+    body = data as BodyInit;
+  } else if (data !== undefined) {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify(data);
+  }
+
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
+    headers,
+    body,
     credentials: "include",
   });
 

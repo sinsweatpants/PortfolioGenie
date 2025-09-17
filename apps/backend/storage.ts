@@ -3,6 +3,7 @@ import {
   portfolios,
   projects,
   templates,
+  portfolioVersions,
   type User,
   type UpsertUser,
   type Portfolio,
@@ -11,6 +12,8 @@ import {
   type InsertProject,
   type Template,
   type InsertTemplate,
+  type PortfolioVersion,
+  type InsertPortfolioVersion,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, like, sql } from "drizzle-orm";
@@ -44,6 +47,11 @@ export interface IStorage {
   getTemplate(id: string): Promise<Template | undefined>;
   createTemplate(template: InsertTemplate): Promise<Template>;
   incrementTemplateUsage(id: string): Promise<void>;
+
+  // Version operations
+  getPortfolioVersions(portfolioId: string): Promise<PortfolioVersion[]>;
+  getPortfolioVersion(id: string): Promise<PortfolioVersion | undefined>;
+  createPortfolioVersion(version: InsertPortfolioVersion): Promise<PortfolioVersion>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -214,6 +222,30 @@ export class DatabaseStorage implements IStorage {
         usageCount: sql`${templates.usageCount} + 1`,
       })
       .where(eq(templates.id, id));
+  }
+
+  async getPortfolioVersions(portfolioId: string): Promise<PortfolioVersion[]> {
+    return await db
+      .select()
+      .from(portfolioVersions)
+      .where(eq(portfolioVersions.portfolioId, portfolioId))
+      .orderBy(desc(portfolioVersions.createdAt));
+  }
+
+  async getPortfolioVersion(id: string): Promise<PortfolioVersion | undefined> {
+    const [version] = await db
+      .select()
+      .from(portfolioVersions)
+      .where(eq(portfolioVersions.id, id));
+    return version;
+  }
+
+  async createPortfolioVersion(version: InsertPortfolioVersion): Promise<PortfolioVersion> {
+    const [created] = await db
+      .insert(portfolioVersions)
+      .values(version)
+      .returning();
+    return created;
   }
 }
 

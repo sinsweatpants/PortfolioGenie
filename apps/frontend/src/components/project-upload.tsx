@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { optimizeImageFile } from "@/lib/imageOptimizer";
 import { 
   Form,
   FormControl,
@@ -41,6 +42,12 @@ export function ProjectUpload({ portfolioId, onSuccess, onCancel }: ProjectUploa
   const queryClient = useQueryClient();
   const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [imageMeta, setImageMeta] = useState<{
+    originalSize: number;
+    optimizedSize: number;
+    width: number | null;
+    height: number | null;
+  } | null>(null);
 
   const form = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema),
@@ -63,6 +70,7 @@ export function ProjectUpload({ portfolioId, onSuccess, onCancel }: ProjectUploa
       });
       form.reset();
       setUploadedImage(null);
+      setImageMeta(null);
       queryClient.invalidateQueries({ queryKey: [`/api/portfolios/${portfolioId}/projects`] });
       if (onSuccess) {
         onSuccess();
@@ -92,7 +100,7 @@ export function ProjectUpload({ portfolioId, onSuccess, onCancel }: ProjectUploa
     mutationFn: async (file: File) => {
       const formData = new FormData();
       formData.append('file', file);
-      
+
       const response = await apiRequest("POST", "/api/upload", formData);
       return await response.json();
     },
@@ -149,7 +157,21 @@ export function ProjectUpload({ portfolioId, onSuccess, onCancel }: ProjectUploa
 
     setIsUploading(true);
     try {
-      await uploadFileMutation.mutateAsync(file);
+      const optimized = await optimizeImageFile(file);
+      setImageMeta({
+        originalSize: optimized.originalSize,
+        optimizedSize: optimized.optimizedSize,
+        width: optimized.width,
+        height: optimized.height,
+      });
+      await uploadFileMutation.mutateAsync(optimized.optimizedFile);
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Optimization failed",
+        description: "Could not process this image. Try another file.",
+        variant: "destructive",
+      });
     } finally {
       setIsUploading(false);
     }
@@ -168,6 +190,7 @@ export function ProjectUpload({ portfolioId, onSuccess, onCancel }: ProjectUploa
 
   const removeUploadedImage = () => {
     setUploadedImage(null);
+    setImageMeta(null);
   };
 
   return (
@@ -181,8 +204,8 @@ export function ProjectUpload({ portfolioId, onSuccess, onCancel }: ProjectUploa
             <Card>
               <CardContent className="p-4">
                 <div className="relative">
-                  <img 
-                    src={uploadedImage} 
+                  <img
+                    src={uploadedImage}
                     alt="Uploaded project image"
                     className="w-full h-48 object-cover rounded-lg"
                   />
@@ -197,6 +220,26 @@ export function ProjectUpload({ portfolioId, onSuccess, onCancel }: ProjectUploa
                     <X className="w-4 h-4" />
                   </Button>
                 </div>
+                {imageMeta && (
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                    <div>
+                      <span className="font-medium text-foreground">Original Size:</span>
+                      <p>{(imageMeta.originalSize / 1024).toFixed(1)} KB</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Optimized Size:</span>
+                      <p>{(imageMeta.optimizedSize / 1024).toFixed(1)} KB</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Width:</span>
+                      <p>{imageMeta.width ? `${imageMeta.width}px` : "Auto"}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-foreground">Height:</span>
+                      <p>{imageMeta.height ? `${imageMeta.height}px` : "Auto"}</p>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -217,12 +260,12 @@ export function ProjectUpload({ portfolioId, onSuccess, onCancel }: ProjectUploa
                       id="image-upload"
                       data-testid="input-file-upload"
                     />
-                    <Label 
-                      htmlFor="image-upload" 
+                    <Label
+                      htmlFor="image-upload"
                       className="cursor-pointer"
                     >
-                      <Button 
-                        type="button" 
+                      <Button
+                        type="button"
                         variant="outline"
                         disabled={isUploading}
                         asChild
@@ -238,6 +281,7 @@ export function ProjectUpload({ portfolioId, onSuccess, onCancel }: ProjectUploa
                   <p className="text-xs text-muted-foreground">
                     JPG, PNG, GIF up to 5MB
                   </p>
+                  {isUploading && <p className="text-xs text-primary">Optimizing image…</p>}
                 </div>
               </div>
             </div>
